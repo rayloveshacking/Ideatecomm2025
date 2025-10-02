@@ -59,7 +59,7 @@
         }
 
         function loadStories(filter = '') {
-            const url = filter ? `http://localhost:3000/api/stories?${filter}` : 'http://localhost:3000/api/stories';
+            const url = filter ? `/api/stories?${filter}` : '/api/stories';
             
             fetch(url)
             .then(response => response.json())
@@ -120,7 +120,7 @@
         }
 
         function reactToStory(storyId, reactionType) {
-            fetch(`http://localhost:3000/api/stories/${storyId}/react`, {
+            fetch(`/api/stories/${storyId}/react`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ reactionType })
@@ -150,7 +150,7 @@
             }
 
             // Fetch user data to get name
-            fetch(`http://localhost:3000/api/volunteers/${currentUserId}`)
+            fetch(`/api/volunteers/${currentUserId}`)
             .then(response => response.json())
             .then(user => {
                 const formData = new FormData(e.target);
@@ -166,7 +166,7 @@
                     tags: tags
                 };
                 
-                fetch('http://localhost:3000/api/stories', {
+                fetch('/api/stories', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(storyData)

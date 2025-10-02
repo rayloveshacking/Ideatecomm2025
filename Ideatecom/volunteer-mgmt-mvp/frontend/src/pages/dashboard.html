@@ -907,7 +907,7 @@
                 return;
             }
 
-            fetch(`http://localhost:3000/api/activities/${activityId}/unregister/${currentUserId}` , {
+            fetch(`/api/activities/${activityId}/unregister/${currentUserId}` , {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -936,7 +936,7 @@
                 return;
             }
 
-            fetch(`http://localhost:3000/api/volunteers/${currentUserId}`)
+            fetch(`/api/volunteers/${currentUserId}`)
                 .then(response => {
                     if (!response.ok) {
                         throw new Error('Failed to fetch volunteer');
@@ -949,7 +949,7 @@
                         return;
                     }
 
-                    fetch('http://localhost:3000/api/activities')
+                    fetch('/api/activities')
                         .then(response => {
                             if (!response.ok) {
                                 throw new Error('Failed to fetch activities');

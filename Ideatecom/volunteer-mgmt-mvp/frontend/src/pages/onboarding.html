@@ -6,7 +6,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==" crossorigin="anonymous" referrerpolicy="no-referrer">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="../style/styles.css">
+    <link rel="stylesheet" href="/style/styles.css">
     <style>
         body { font-family: 'Inter', sans-serif; }
     </style>
@@ -965,7 +965,7 @@
                 return;
             }
 
-            fetch(`http://localhost:3000/api/volunteers/${currentUserId}`)
+            fetch(`/api/volunteers/${currentUserId}`)
                 .then(response => response.json())
                 .then(user => {
                     if (!user || user.error) {
@@ -1164,7 +1164,7 @@
                 <li id="resource-1" onclick="toggleResource('resource-1')" class="flex items-center p-3 rounded-xl cursor-pointer transition duration-150 bg-slate-50 hover:bg-slate-100">
                     <input type="checkbox" id="check-1" class="hidden">
                     <label for="check-1" class="flex-grow flex items-start gap-3">
-                        <span class="text-2xl">�</span>
+                        <span class="text-2xl"></span>
                         <div>
                             <p class="font-semibold text-slate-800">Review: Safety Protocol (V2.1)</p>
                             <p class="text-sm text-slate-500">Master the basics of on-road safety and emergency response.</p>

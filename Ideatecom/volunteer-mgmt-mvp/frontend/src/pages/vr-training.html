@@ -62,7 +62,7 @@
         }
 
         function loadVRModules() {
-            fetch('http://localhost:3000/api/vr-modules')
+            fetch('/api/vr-modules')
             .then(response => response.json())
             .then(modules => {
                 vrModules = modules;
@@ -86,7 +86,7 @@
                 return;
             }
 
-            fetch(`http://localhost:3000/api/volunteers/${currentUserId}/vr-progress`)
+            fetch(`/api/volunteers/${currentUserId}/vr-progress`)
             .then(response => response.json())
             .then(data => {
                 userProgress = data.progress || [];
@@ -259,7 +259,7 @@
                 // Simulate module completion (in real app, this would launch VR interface)
                 const completed = Math.random() > 0.3; // 70% completion rate for demo
                 
-                fetch('http://localhost:3000/api/vr-progress', {
+                fetch('/api/vr-progress', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
