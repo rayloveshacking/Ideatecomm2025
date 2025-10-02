@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Cycling Events - Anchor by Ageless Bicyclists</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==" crossorigin="anonymous" referrerpolicy="no-referrer">
+    <link rel="stylesheet" href="../style/styles.css">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .progress-bar {
+            height: 10px;
+            background: rgba(148, 163, 184, 0.2);
+            border-radius: 999px;
+            overflow: hidden;
+            position: relative;
+        }
+        .progress-fill {
+            height: 100%;
+            transition: width 0.35s ease-in-out;
+            background: linear-gradient(135deg, #38bdf8, #0ea5e9);
+        }
+    </style>
+    <script>
+        const VOLUNTEERS_STORAGE_KEY = 'AB_VOLUNTEERS';
+        const ACTIVITIES_STORAGE_KEY = 'AB_ACTIVITIES';
+        const CURRENT_USER_ID_KEY = 'CURRENT_USER_ID';
+
+        function initResponsiveNav() {
+            const navContainer = document.querySelector('.nav-container');
+            const toggle = document.querySelector('.nav-toggle');
+            const navList = document.getElementById('primary-navigation');
+            if (!navContainer || !toggle || !navList) return;
+
+            const toggleIcon = toggle.querySelector('i');
+
+            const closeMenu = () => {
+                navContainer.dataset.menuOpen = 'false';
+                toggle.setAttribute('aria-expanded', 'false');
+                if (toggleIcon) {
+                    toggleIcon.classList.add('fa-bars');
+                    toggleIcon.classList.remove('fa-xmark');
+                }
+            };
+
+            toggle.addEventListener('click', (event) => {
+                event.stopPropagation();
+                const isOpen = navContainer.dataset.menuOpen === 'true';
+                const nextState = !isOpen;
+                navContainer.dataset.menuOpen = String(nextState);
+                toggle.setAttribute('aria-expanded', String(nextState));
+                if (toggleIcon) {
+                    toggleIcon.classList.toggle('fa-bars', !nextState);
+                    toggleIcon.classList.toggle('fa-xmark', nextState);
+                }
+            });
+
+            document.addEventListener('click', (event) => {
+                if (!navContainer.contains(event.target)) {
+                    closeMenu();
+                }
+            });
+
+            navList.querySelectorAll('a').forEach((link) => {
+                link.addEventListener('click', () => closeMenu());
+            });
+
+            window.addEventListener('resize', () => {
+                if (window.innerWidth > 640) {
+                    closeMenu();
+                }
+            });
+
+            closeMenu();
+        }
+
+        function getVolunteers() {
+            try {
+                const data = localStorage.getItem(VOLUNTEERS_STORAGE_KEY);
+                return data ? JSON.parse(data) : [];
+            } catch (e) { return []; }
+        }
+
+        function saveVolunteers(volunteers) {
+            try {
+                localStorage.setItem(VOLUNTEERS_STORAGE_KEY, JSON.stringify(volunteers));
+            } catch (e) { console.error("Error saving volunteers to localStorage:", e); }
+        }
+
+        function getActivities() {
+            try {
+                const data = localStorage.getItem(ACTIVITIES_STORAGE_KEY);
+                return data ? JSON.parse(data) : [];
+            } catch (e) { return []; }
+        }
+        
+        function saveActivities(activities) {
+            try {
+                localStorage.setItem(ACTIVITIES_STORAGE_KEY, JSON.stringify(activities));
+            } catch (e) { console.error("Error saving activities to localStorage:", e); }
+        }
+
+        // Helper to format date/time
+        function formatDate(isoString) {
+            const date = new Date(isoString + 'T00:00:00'); 
+            return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+        }
+
+        // Custom Message Box function (replacing alert())
+        function showMessageBox(message, isError = false) {
+            const messageBox = document.getElementById('message-box');
+            const messageText = document.getElementById('message-box-text');
+            const messageCard = document.getElementById('message-box-card');
+            const messageIcon = document.getElementById('message-box-icon');
+            
+            messageText.innerHTML = message;
+            
+            // Set styles based on error status
+            if (isError) {
+                messageCard.classList.remove('border-sky-500');
+                messageCard.classList.add('border-red-500');
+                document.getElementById('close-message-box').classList.remove('bg-sky-500');
+                document.getElementById('close-message-box').classList.add('bg-red-500');
+                messageIcon.className = 'fa-solid fa-triangle-exclamation text-red-500 text-3xl mb-3';
+            } else {
+                messageCard.classList.remove('border-red-500');
+                messageCard.classList.add('border-green-500'); // Changed to green for success
+                document.getElementById('close-message-box').classList.remove('bg-red-500');
+                document.getElementById('close-message-box').classList.add('bg-green-500');
+                messageIcon.className = 'fa-solid fa-circle-check text-green-500 text-3xl mb-3';
+            }
+            messageBox.classList.remove('hidden');
+        }
+        
+        function handleMissingVolunteerProfile(customMessage) {
+            const message = customMessage || "We couldn't find your volunteer profile. Please sign up again to continue.";
+            console.warn('Missing volunteer profile detected. Clearing stored ID and redirecting to signup.');
+            localStorage.removeItem(CURRENT_USER_ID_KEY);
+            showMessageBox(`${message} Redirecting you to the sign-up page.`, true);
+            setTimeout(() => {
+                window.location.href = 'signup.html';
+            }, 2000);
+        }
+        
+        window.handleRegistration = async function(activityId) {
+            console.log('=== REGISTRATION BUTTON CLICKED ===');
+            console.log('handleRegistration called with activityId:', activityId);
+            console.log('Window width:', window.innerWidth);
+            console.log('Is mobile view?', window.innerWidth < 768);
+
+            const currentUserId = localStorage.getItem(CURRENT_USER_ID_KEY);
+            console.log('Current user ID:', currentUserId);
+
+            if (!currentUserId) {
+                console.error('No user ID found in localStorage');
+                handleMissingVolunteerProfile("We couldn't identify your volunteer profile.");
+                return;
+            }
+
+            try {
+                console.log('Fetching user data from API...');
+                const userResponse = await fetch(`http://localhost:3000/api/volunteers/${currentUserId}`);
+                console.log('User fetch response status:', userResponse.status);
+
+                if (userResponse.status === 404) {
+                    handleMissingVolunteerProfile();
+                    return;
+                }
+
+                if (!userResponse.ok) {
+                    throw new Error(`Failed to fetch volunteer profile: ${userResponse.status}`);
+                }
+
+                const currentUser = await userResponse.json();
+                console.log('Current user data:', currentUser);
+
+                if (currentUser.assignedActivityId) {
+                    console.log('User already assigned to:', currentUser.assignedActivityId);
+                    const activitiesResponse = await fetch('http://localhost:3000/api/activities');
+                    if (activitiesResponse.ok) {
+                        const activities = await activitiesResponse.json();
+                        const currentAssignment = activities.find(a => a.id === currentUser.assignedActivityId);
+                        const assignedName = currentAssignment ? currentAssignment.name : 'another event';
+                        showMessageBox(`You are already assigned to: <strong>${assignedName}</strong>. Please complete or unregister from your current mission first.`, true);
+                    } else {
+                        showMessageBox('Unable to verify your current assignment right now. Please try again shortly.', true);
+                    }
+                    return;
+                }
+
+                console.log('Registering user for activity...');
+                const registrationResponse = await fetch(`http://localhost:3000/api/activities/${activityId}/register/${currentUserId}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                console.log('Registration response status:', registrationResponse.status);
+
+                if (registrationResponse.status === 404) {
+                    const errorData = await registrationResponse.json();
+                    if (errorData.error === 'Volunteer not found') {
+                        handleMissingVolunteerProfile();
+                        return;
+                    }
+                }
+
+                const registrationData = await registrationResponse.json();
+                console.log('Registration response data:', registrationData);
+
+                if (!registrationResponse.ok || registrationData.error) {
+                    showMessageBox(registrationData.error || 'Registration failed. Please try again.', true);
+                    return;
+                }
+
+                showMessageBox(`
+                    Success! You are now registered for "<strong>${registrationData.activity.name}</strong>" on ${formatDate(registrationData.activity.date)}.<br><br>
+                    <a href="dashboard.html" class="inline-block mt-2 bg-sky-500 hover:bg-sky-600 text-white font-bold py-2 px-4 rounded-lg transition duration-200">
+                        <i class="fa-solid fa-gauge-high mr-2"></i> View Dashboard
+                    </a>
+                `);
+                renderEvents();
+            } catch (error) {
+                console.error('Registration error:', error);
+                showMessageBox('An error occurred during registration. Please try again.', true);
+            }
+        }
+
+        // --- NEW: Sorting Logic ---
+        let currentSort = 'date-asc'; // Default sort
+
+        function highlightSortControls() {
+            const buttons = document.querySelectorAll('#sort-controls button');
+            buttons.forEach(button => {
+                const isActive = button.id === `sort-${currentSort}`;
+                button.classList.toggle('btn-primary', isActive);
+                button.classList.toggle('btn-ghost', !isActive);
+                button.classList.toggle('bg-sky-500', isActive);
+                button.classList.toggle('text-white', isActive);
+                button.classList.toggle('bg-gray-200', !isActive);
+                button.classList.toggle('text-gray-700', !isActive);
+            });
+        }
+
+        window.updateSort = function(newSort) {
+            currentSort = newSort;
+            highlightSortControls();
+            renderEvents();
+        }
+
+        function getSortedEvents(activities) {
+            let sorted = [...activities];
+
+            switch(currentSort) {
+                case 'date-asc':
+                    sorted.sort((a, b) => new Date(a.date) - new Date(b.date));
+                    break;
+                case 'date-desc':
+                    sorted.sort((a, b) => new Date(b.date) - new Date(a.date));
+                    break;
+                case 'spots-desc': // Most spots left
+                    sorted.sort((a, b) => 
+                        (b.requiredVolunteers - b.assignedVolunteerIds.length) - 
+                        (a.requiredVolunteers - a.assignedVolunteerIds.length)
+                    );
+                    break;
+                case 'spots-asc': // Fewest spots left
+                    sorted.sort((a, b) => 
+                        (a.requiredVolunteers - a.assignedVolunteerIds.length) - 
+                        (b.requiredVolunteers - b.assignedVolunteerIds.length)
+                    );
+                    break;
+            }
+            return sorted;
+        }
+        // --- END Sorting Logic ---
+
+        function attachRegisterButtonHandlers() {
+            const buttons = document.querySelectorAll('.register-btn');
+            buttons.forEach(button => {
+                button.type = 'button';
+                button.addEventListener('click', (event) => {
+                    if (button.disabled) {
+                        return;
+                    }
+                    event.preventDefault();
+                    event.stopPropagation();
+                    const activityId = button.getAttribute('data-activity-id');
+                    if (!activityId) {
+                        console.error('Register button missing data-activity-id');
+                        return;
+                    }
+                    console.log('Register button clicked:', activityId);
+                    handleRegistration(activityId);
+                });
+            });
+        }
+
+        async function renderEvents() {
+            const eventsList = document.getElementById('events-list');
+            if (!eventsList) {
+                return;
+            }
+
+            const currentUserId = localStorage.getItem(CURRENT_USER_ID_KEY);
+            if (!currentUserId) {
+                window.location.href = 'signup.html';
+                return;
+            }
+
+            try {
+                const userResponse = await fetch(`http://localhost:3000/api/volunteers/${currentUserId}`);
+                if (userResponse.status === 404) {
+                    eventsList.innerHTML = `
+                        <li class="p-6 text-center text-red-500 bg-white rounded-xl shadow-lg border-l-4 border-red-400">
+                            We couldn't find your volunteer profile. Please sign up again to browse and register for missions.
+                        </li>
+                    `;
+                    handleMissingVolunteerProfile();
+                    return;
+                }
+
+                if (!userResponse.ok) {
+                    throw new Error(`Failed to fetch volunteer profile: ${userResponse.status}`);
+                }
+                const currentUser = await userResponse.json();
+
+                const activitiesResponse = await fetch('http://localhost:3000/api/activities');
+                if (!activitiesResponse.ok) {
+                    throw new Error(`Failed to fetch activities: ${activitiesResponse.status}`);
+                }
+                const activities = await activitiesResponse.json();
+
+                if (!currentUser) {
+                    eventsList.innerHTML = '<li class="p-4 text-center text-red-500">No volunteer profile loaded. Please sign up first.</li>';
+                    return;
+                }
+
+                const today = new Date().toISOString().split('T')[0];
+                const availableEvents = activities
+                    .filter(activity => activity.assignedVolunteerIds.length < activity.requiredVolunteers)
+                    .filter(activity => activity.date >= today);
+
+                const sortedEvents = getSortedEvents(availableEvents);
+
+                if (sortedEvents.length === 0) {
+                    eventsList.innerHTML = `
+                        <li class="p-8 text-center text-gray-500 bg-white rounded-xl shadow-lg border-l-4 border-red-400">
+                            <i class="fa-solid fa-mug-hot text-4xl mb-3 text-red-400"></i>
+                            <p class="text-xl font-semibold">Mission Control is quiet!</p>
+                            <p class="mt-2">All upcoming activities are either full or none have been scheduled yet. Check back soon!</p>
+                        </li>
+                    `;
+                    highlightSortControls();
+                    return;
+                }
+
+                eventsList.innerHTML = sortedEvents.map(activity => {
+                    const assigned = activity.assignedVolunteerIds.length;
+                    const required = activity.requiredVolunteers;
+                    const remaining = required - assigned;
+                    const percentFull = (assigned / required) * 100;
+
+                    const isRegistered = activity.assignedVolunteerIds.includes(currentUser.id);
+                    const isAssignedToOther = currentUser.assignedActivityId && currentUser.assignedActivityId !== activity.id;
+
+                    let buttonText = 'Register Now';
+                    let buttonClass = 'bg-sky-500 hover:bg-sky-700';
+                    let buttonIcon = '<i class="fa-solid fa-clipboard-check mr-2"></i>';
+                    let buttonDisabled = false;
+
+                    if (isRegistered) {
+                        buttonText = 'Registered!';
+                        buttonClass = 'bg-green-500 cursor-not-allowed';
+                        buttonIcon = '<i class="fa-solid fa-check-double mr-2"></i>';
+                        buttonDisabled = true;
+                    } else if (isAssignedToOther) {
+                        buttonText = 'Assigned Elsewhere';
+                        buttonClass = 'bg-red-500 cursor-not-allowed';
+                        buttonIcon = '<i class="fa-solid fa-ban mr-2"></i>';
+                        buttonDisabled = true;
+                    }
+
+                    let progressClass = 'bg-green-500';
+                    if (remaining <= 2) {
+                        progressClass = 'bg-red-500';
+                    } else if (remaining <= 4) {
+                        progressClass = 'bg-yellow-500';
+                    }
+
+                    return `
+                        <li class="bg-white p-6 rounded-xl shadow-lg border-t-4 border-sky-400 flex flex-col transition duration-300 hover:shadow-2xl" style="pointer-events: auto;">
+                            <div class="flex justify-between items-start mb-4">
+                                <div class="md:w-2/3">
+                                    <p class="text-2xl font-bold text-gray-800">${activity.name}</p>
+                                    <p class="text-md text-sky-600 font-semibold mt-1">
+                                        <i class="fa-solid fa-calendar-alt mr-2"></i> ${formatDate(activity.date)}
+                                    </p>
+                                </div>
+                                <div class="md:w-1/3 flex flex-col items-end space-y-1">
+                                    <span class="px-3 py-1 text-sm font-semibold rounded-full ${remaining <= 2 ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}">
+                                        ${remaining <= 2 ? '<i class="fa-solid fa-fire-extinguisher mr-1"></i> HIGH DEMAND' : '<i class="fa-solid fa-check-circle mr-1"></i> SPOTS OPEN'}
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div class="mb-4">
+                                <p class="text-sm text-gray-600 mb-2 font-medium">
+                                    <i class="fa-solid fa-person-biking text-blue-500 mr-1"></i> Role Needed: 
+                                    <span class="font-bold">${activity.roleNeeded.charAt(0).toUpperCase() + activity.roleNeeded.slice(1).replace('-', ' ')}</span>
+                                </p>
+                                <div class="text-xs text-gray-500 mb-1 flex justify-between">
+                                    <span>Spots Left: <span class="font-bold text-base ${remaining <= 2 ? 'text-red-600' : 'text-green-600'}">${remaining}</span>/${required}</span>
+                                    <span>${Math.round(percentFull)}% Full</span>
+                                </div>
+                                <div class="progress-bar">
+                                    <div class="progress-fill ${progressClass}" style="width: ${percentFull}%;"></div>
+                                </div>
+                            </div>
+
+                            <button 
+                                type="button"
+                                data-activity-id="${activity.id}"
+                                class="register-btn ${buttonClass} text-white font-bold py-3 px-6 rounded-lg transition duration-200 w-full disabled:opacity-70 disabled:cursor-not-allowed text-lg shadow-md"
+                                style="pointer-events: auto; position: relative; z-index: 10;"
+                                ${buttonDisabled ? 'disabled' : ''}>
+                                ${buttonIcon} ${buttonText}
+                            </button>
+                        </li>
+                    `;
+                }).join('');
+
+                attachRegisterButtonHandlers();
+                highlightSortControls();
+            } catch (error) {
+                console.error('Error rendering events:', error);
+                eventsList.innerHTML = `
+                    <li class="p-6 text-center text-red-500 bg-white rounded-xl shadow-lg border-l-4 border-red-400">
+                        Unable to load activities right now. Please try again shortly.
+                    </li>
+                `;
+            }
+        }
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            highlightSortControls();
+            renderEvents();
+
+            const closeButton = document.getElementById('close-message-box');
+            if (closeButton) {
+                closeButton.addEventListener('click', () => {
+                    const messageBox = document.getElementById('message-box');
+                    if (messageBox) {
+                        messageBox.classList.add('hidden');
+                    }
+                });
+            }
+
+            initResponsiveNav();
+        });
+    </script>
+</head>
+<body>
+    <div id="message-box" class="fixed inset-0 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center z-50 hidden">
+        <div class="glass-card glass-card--light w-80 text-center" id="message-box-card">
+            <i id="message-box-icon" class="text-3xl mb-3"></i>
+            <p id="message-box-text" class="text-lg font-semibold text-slate-800 mb-4"></p>
+            <button id="close-message-box" class="btn btn-primary w-full justify-center">OK</button>
+        </div>
+    </div>
+    
+    <header class="site-header">
+        <div class="nav-container" data-menu-open="false">
+            <a class="brand-link" href="index.html">
+                <span class="brand-emblem"><i class="fa-solid fa-bicycle"></i></span>
+                <span>Ageless Bicyclists</span>
+            </a>
+            <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="primary-navigation">
+                <span class="sr-only">Toggle navigation</span>
+                <i class="fa-solid fa-bars"></i>
+            </button>
+            <nav id="primary-navigation" class="nav-list">
+                <a href="index.html" class="nav-link">Home</a>
+                <a href="signup.html" class="nav-link">Join</a>
+                <a href="dashboard.html" class="nav-link">Dashboard</a>
+                <a href="events.html" class="nav-link nav-link--active">Events</a>
+                <a href="stories.html" class="nav-link">Stories</a>
+                <a href="buddy-matching.html" class="nav-link">Matching</a>
+                <a href="vr-training.html" class="nav-link">VR Training</a>
+                <a href="onboarding.html" class="nav-link">Resources</a>
+                <a href="admin.html" class="nav-link">Admin</a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="page-shell">
+        <section class="hero-card">
+            <div class="space-y-5">
+                <span class="hero-eyebrow"><i class="fa-solid fa-calendar-check"></i> Inclusive cycling sessions</span>
+                <h1 class="hero-title">Join our next cycling adventure with ASD participants.</h1>
+                <p class="hero-summary">Browse upcoming inclusive cycling sessions designed for individuals with Autism Spectrum Disorder. Each ride is carefully planned with sensory-friendly routes and trained volunteer support.</p>
+
+                <div class="glass-card glass-card--light">
+                    <div class="flex flex-wrap items-center justify-between gap-4">
+                        <div>
+                            <span class="tag"><i class="fa-solid fa-sort"></i> Sort options</span>
+                            <p class="mt-2 text-slate-600">Quickly reorder sessions to see the soonest dates, most urgent spots, or newest additions.</p>
+                        </div>
+                        <div id="sort-controls" class="flex flex-wrap gap-2">
+                            <button id="sort-date-asc" onclick="updateSort('date-asc')" class="btn btn-primary text-sm py-2"><i class="fa-solid fa-arrow-up"></i> Soonest date</button>
+                            <button id="sort-date-desc" onclick="updateSort('date-desc')" class="btn btn-ghost text-sm py-2 border border-slate-200"><i class="fa-solid fa-arrow-down"></i> Latest date</button>
+                            <button id="sort-spots-desc" onclick="updateSort('spots-desc')" class="btn btn-ghost text-sm py-2 border border-slate-200"><i class="fa-solid fa-star"></i> Most spots</button>
+                            <button id="sort-spots-asc" onclick="updateSort('spots-asc')" class="btn btn-ghost text-sm py-2 border border-slate-200"><i class="fa-solid fa-fire"></i> High demand</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="glass-card glass-card--light">
+                <span class="tag"><i class="fa-solid fa-bullhorn"></i> Open opportunities</span>
+                <h2 class="mt-3 text-2xl font-extrabold text-slate-900">Choose your mission and lock it in.</h2>
+                <p class="text-slate-600 mt-2">Every card shows the remaining spots, role focus, and how close the mission is to being fully staffed.</p>
+                <ul id="events-list" class="space-y-4 mt-6">
+                    <li class="empty-state">Loading activities...</li>
+                </ul>
+            </div>
+        </section>
+    </main>
+
+    <footer class="site-footer">
+        &copy; 2025 Ageless Bicyclists · Anchor Platform · Every ride matters
+    </footer>
+</body>
+</html>

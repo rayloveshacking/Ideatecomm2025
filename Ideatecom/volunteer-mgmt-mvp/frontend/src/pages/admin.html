@@ -1,0 +1,839 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard - Anchor by Ageless Bicyclists</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==" crossorigin="anonymous" referrerpolicy="no-referrer">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../style/styles.css">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .calendar-cell {
+            min-height: 90px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 8px;
+            text-align: center;
+            cursor: pointer;
+        }
+        @keyframes pulse-up {
+            0% { transform: translateY(0); opacity: 0.5; }
+            50% { transform: translateY(-10px); opacity: 1; }
+            100% { transform: translateY(0); opacity: 0; }
+        }
+        .passion-power-up {
+            animation: pulse-up 1s ease-out forwards;
+        }
+    </style>
+    <script>
+        const VOLUNTEERS_STORAGE_KEY = 'AB_VOLUNTEERS';
+        const ACTIVITIES_STORAGE_KEY = 'AB_ACTIVITIES';
+        const APPRAISALS_STORAGE_KEY = 'AB_APPRAISALS'; 
+
+        function initResponsiveNav() {
+            const navContainer = document.querySelector('.nav-container');
+            const toggle = document.querySelector('.nav-toggle');
+            const navList = document.getElementById('primary-navigation');
+            if (!navContainer || !toggle || !navList) return;
+
+            const toggleIcon = toggle.querySelector('i');
+
+            const closeMenu = () => {
+                navContainer.dataset.menuOpen = 'false';
+                toggle.setAttribute('aria-expanded', 'false');
+                if (toggleIcon) {
+                    toggleIcon.classList.add('fa-bars');
+                    toggleIcon.classList.remove('fa-xmark');
+                }
+            };
+
+            toggle.addEventListener('click', (event) => {
+                event.stopPropagation();
+                const isOpen = navContainer.dataset.menuOpen === 'true';
+                const nextState = !isOpen;
+                navContainer.dataset.menuOpen = String(nextState);
+                toggle.setAttribute('aria-expanded', String(nextState));
+                if (toggleIcon) {
+                    toggleIcon.classList.toggle('fa-bars', !nextState);
+                    toggleIcon.classList.toggle('fa-xmark', nextState);
+                }
+            });
+
+            document.addEventListener('click', (event) => {
+                if (!navContainer.contains(event.target)) {
+                    closeMenu();
+                }
+            });
+
+            navList.querySelectorAll('a').forEach((link) => {
+                link.addEventListener('click', () => closeMenu());
+            });
+
+            window.addEventListener('resize', () => {
+                if (window.innerWidth > 640) {
+                    closeMenu();
+                }
+            });
+
+            closeMenu();
+        }
+
+        // State for the calendar view
+        let currentCalendarDate = new Date();
+
+        function getVolunteers() {
+            try {
+                const data = localStorage.getItem(VOLUNTEERS_STORAGE_KEY);
+                return data ? JSON.parse(data) : [];
+            } catch (e) { return []; }
+        }
+
+        function saveVolunteers(volunteers) {
+            try {
+                localStorage.setItem(VOLUNTEERS_STORAGE_KEY, JSON.stringify(volunteers));
+            } catch (e) { console.error("Error saving volunteers to localStorage:", e); }
+        }
+
+        function getActivities() {
+            try {
+                const data = localStorage.getItem(ACTIVITIES_STORAGE_KEY);
+                return data ? JSON.parse(data) : [];
+            } catch (e) { return []; }
+        }
+        
+        function getAppraisals() {
+            try {
+                const data = localStorage.getItem(APPRAISALS_STORAGE_KEY);
+                return data ? JSON.parse(data) : [];
+            } catch (e) { return []; }
+        }
+
+        // Helper to format date/time
+        function formatTimestamp(isoString) {
+            const date = new Date(isoString);
+            return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
+        
+        // --- Activity Form Submission ---
+        function handleActivitySubmit(e) {
+            e.preventDefault();
+            const form = e.target;
+            const formData = new FormData(form);
+            
+            // Create new activity object
+            const newActivity = {
+                name: formData.get('activity-name'),
+                roleNeeded: formData.get('role-needed'),
+                date: formData.get('activity-date'),
+                requiredVolunteers: parseInt(formData.get('required-vols')),
+                description: formData.get('activity-description') || ''
+            };
+            
+            // Send new activity to backend API
+            fetch('http://localhost:3000/api/activities', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(newActivity)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    showMessageBox(data.error, true);
+                } else {
+                    form.reset();
+                    renderAllocationDashboard(); 
+                    renderCalendar(currentCalendarDate); // Refresh calendar
+                    showMessageBox('New Activity Added! Check the Calendar and Allocation Tool.');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showMessageBox("An error occurred while adding the activity. Please try again.", true);
+            });
+        }
+
+        // Custom Message Box function (replacing alert())
+        function showMessageBox(message, isError = false) {
+            const messageBox = document.getElementById('message-box');
+            const messageText = document.getElementById('message-box-text');
+            const messageCard = document.getElementById('message-box-card');
+            
+            messageText.textContent = message;
+            
+            if (isError) {
+                messageCard.classList.remove('border-green-500');
+                messageCard.classList.add('border-red-500');
+            } else {
+                messageCard.classList.add('border-green-500');
+                messageCard.classList.remove('border-red-500');
+            }
+            messageBox.classList.remove('hidden');
+        }
+
+        // --- CALENDAR LOGIC ---
+        function renderCalendar(date) {
+            const calendarGrid = document.getElementById('calendar-grid');
+            const calendarHeader = document.getElementById('calendar-header');
+            
+            if (!calendarGrid || !calendarHeader) return;
+
+            const activities = getActivities();
+            const currentMonth = date.getMonth();
+            const currentYear = date.getFullYear();
+
+            // Format activities by date for quick lookup
+            const activitiesByDate = activities.reduce((acc, activity) => {
+                const key = activity.date; // YYYY-MM-DD
+                if (!acc[key]) acc[key] = [];
+                acc[key].push(activity);
+                return acc;
+            }, {});
+
+            // Set month/year header
+            const monthName = date.toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
+            calendarHeader.innerHTML = `
+                <button onclick="changeMonth(-1)" class="p-2 rounded-full hover:bg-gray-100 text-gray-700 font-bold">&larr; Previous</button>
+                <span class="text-xl font-extrabold text-sky-700">${monthName}</span>
+                <button onclick="changeMonth(1)" class="p-2 rounded-full hover:bg-gray-100 text-gray-700 font-bold">Next &rarr;</button>
+            `;
+
+            calendarGrid.innerHTML = '';
+            
+            // 1. Day Names Header
+            const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+            days.forEach(day => {
+                const headerCell = `<div class="p-2 font-bold text-sm text-gray-500 bg-gray-100 rounded-md">${day}</div>`;
+                calendarGrid.innerHTML += headerCell;
+            });
+
+            const firstDayOfMonth = new Date(currentYear, currentMonth, 1).getDay();
+            const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+
+            // 2. Padding for the start of the month
+            for (let i = 0; i < firstDayOfMonth; i++) {
+                calendarGrid.innerHTML += '<div class="p-2 text-gray-300"></div>';
+            }
+
+            // 3. Day Cells
+            const today = new Date();
+            const todayString = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+
+            for (let day = 1; day <= daysInMonth; day++) {
+                const dateString = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                
+                const dayActivities = activitiesByDate[dateString] || [];
+                
+                let cellClass = 'calendar-cell rounded-lg transition duration-150 relative border';
+                let activityHtml = '';
+                
+                if (dayActivities.length > 0) {
+                    cellClass += ' bg-sky-50 hover:bg-sky-100 border-sky-400';
+                    activityHtml = dayActivities.map(a => 
+                        `<div class="text-[10px] font-semibold mt-1 bg-sky-500 text-white px-1 py-[1px] rounded-sm truncate" title="${a.name}">${a.name}</div>`
+                    ).join('');
+                } else {
+                    cellClass += ' bg-white hover:bg-gray-50 border-gray-200';
+                }
+
+                if (dateString === todayString) {
+                    cellClass += ' ring-2 ring-red-500 ring-offset-1 font-bold';
+                }
+
+                calendarGrid.innerHTML += `
+                    <div class="${cellClass}">
+                        <span class="font-semibold text-gray-800">${day}</span>
+                        ${activityHtml}
+                    </div>
+                `;
+            }
+        }
+
+        window.changeMonth = function(delta) {
+            currentCalendarDate.setMonth(currentCalendarDate.getMonth() + delta);
+            renderCalendar(currentCalendarDate);
+        }
+        // --- END CALENDAR LOGIC ---
+
+
+        // --- Allocation & Sorting Logic ---
+        function renderAllocationDashboard() {
+            // Fetch activities from backend API
+            fetch('http://localhost:3000/api/activities')
+            .then(response => response.json())
+            .then(activities => {
+                // Fetch volunteers from backend API
+                fetch('http://localhost:3000/api/volunteers')
+                .then(response => response.json())
+                .then(volunteers => {
+                    const allocationList = document.getElementById('allocation-list');
+                    const leaderboardBody = document.getElementById('leaderboard-body');
+                    
+                    // 1. Render Allocation List
+                    if (allocationList) {
+                        // Filter out fully staffed activities
+                        const pendingActivities = activities.filter(a => a.assignedVolunteerIds.length < a.requiredVolunteers);
+                        
+                        allocationList.innerHTML = pendingActivities.map(activity => {
+                            const filled = activity.assignedVolunteerIds.length;
+                            const remaining = activity.requiredVolunteers - filled;
+                            
+                            return `
+                                <li class="bg-gray-100 p-4 rounded-lg flex justify-between items-center shadow-sm">
+                                    <div>
+                                        <p class="text-lg font-bold text-sky-700">${activity.name} (${activity.date})</p>
+                                        <p class="text-sm text-gray-500">Role: ${activity.roleNeeded.charAt(0).toUpperCase() + activity.roleNeeded.slice(1).replace('-', ' ')}</p>
+                                        <p class="text-sm text-gray-500 mt-1">Needed: ${activity.requiredVolunteers} | Filled: ${filled} | Remaining: <span class="font-semibold text-red-600">${remaining}</span></p>
+                                    </div>
+                                    <button onclick="autoAllocate('${activity.id}', '${activity.roleNeeded}')" 
+                                        class="bg-sky-500 hover:bg-sky-700 text-white text-sm font-bold py-2 px-4 rounded-lg transition duration-200 disabled:opacity-50"
+                                        ${remaining === 0 ? 'disabled' : ''}>
+                                        Auto-Allocate ${remaining}
+                                    </button>
+                                </li>
+                            `;
+                        }).join('') || '<p class="text-center text-gray-500 mt-4">All activities are fully staffed!</p>';
+                    }
+                    
+                    // 2. Render Leaderboard (sorted by Passion Index)
+                    if (leaderboardBody) {
+                        // Sorting logic: Primary sort by Passion Index (desc), Secondary by name (asc)
+                        const sortedVolunteers = [...volunteers]
+                            .filter(v => v.role !== 'planner') // Exclude senior planners from general allocation pool
+                            .sort((a, b) => b.passionIndex - a.passionIndex || a.name.localeCompare(b.name));
+
+                        leaderboardBody.innerHTML = sortedVolunteers.map((v, index) => `
+                            <tr class="hover:bg-gray-50 border-b ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}">
+                                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${v.name}</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-sky-60 font-bold">${v.passionIndex}</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm">
+                                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${v.assignedActivityId ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}">
+                                        ${v.assignedActivityId ? 'Assigned' : 'Available'}
+                                    </span>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm">${v.role.charAt(0).toUpperCase() + v.role.slice(1).replace('-', ' ')}</td>
+                            </tr>
+                        `).join('');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching volunteers:', error);
+                });
+            })
+            .catch(error => {
+                console.error('Error fetching activities:', error);
+            });
+        }
+        
+        // --- Render Appraisals ---
+        function renderAppraisals() {
+            // Fetch appraisals from backend API
+            fetch('http://localhost:3000/api/appraisals')
+            .then(response => response.json())
+            .then(appraisals => {
+                const appraisalBody = document.getElementById('appraisal-body');
+                
+                // Fetch activities from backend API to get activity names
+                fetch('http://localhost:3000/api/activities')
+                .then(response => response.json())
+                .then(activities => {
+                    const activityMap = activities.reduce((map, activity) => {
+                        map[activity.id] = activity.name;
+                        return map;
+                    }, {});
+
+                    if (appraisalBody) {
+                        if (appraisals.length === 0) {
+                            appraisalBody.innerHTML = `
+                                <tr>
+                                    <td colspan="5" class="px-6 py-4 text-center text-gray-500">No volunteer appraisals submitted yet.</td>
+                                </tr>
+                            `;
+                            return;
+                        }
+
+                        appraisalBody.innerHTML = appraisals.slice().reverse().map((a) => {
+                            const activityName = activityMap[a.activityId] || 'Unknown Activity';
+                            const effectClass = a.passionIndexEffect >= 0 ? 'text-green-700' : 'text-red-700';
+                            return `
+                                <tr class="hover:bg-gray-50 border-b">
+                                    <td class="px-6 py-3 whitespace-nowrap text-sm font-medium text-gray-900">${a.volunteerName}</td>
+                                    <td class="px-6 py-3 whitespace-nowrap text-sm text-sky-60">${activityName}</td>
+                                    <td class="px-6 py-3 whitespace-nowrap text-sm text-center font-bold ${effectClass}">${a.passionIndexEffect}</td>
+                                    <td class="px-6 py-3 text-sm max-w-xs truncate">${a.comment || 'No comment'}</td>
+                                    <td class="px-6 py-3 whitespace-nowrap text-xs text-gray-500">${formatTimestamp(a.timestamp)}</td>
+                                </tr>
+                            `;
+                        }).join('');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching activities:', error);
+                });
+            })
+            .catch(error => {
+                console.error('Error fetching appraisals:', error);
+            });
+        }
+
+        function triggerPassionPowerUp(effect) {
+            const powerUpContainer = document.getElementById('passion-power-up-container');
+            if (!powerUpContainer) return;
+
+            const sign = effect >= 0 ? '+' : '';
+            const color = effect >= 0 ? 'text-green-500' : 'text-red-500';
+
+            const powerUp = document.createElement('div');
+            powerUp.textContent = `${sign}${effect} PI`;
+            powerUp.className = `absolute text-2xl font-extrabold ${color} passion-power-up`;
+
+            const offsetX = (Math.random() - 0.5) * 50;
+            powerUp.style.left = '50%';
+            powerUp.style.transform = `translateX(-50%) translateX(${offsetX}px)`;
+
+            powerUpContainer.appendChild(powerUp);
+            powerUp.addEventListener('animationend', () => powerUp.remove());
+        }
+
+        function populateVolunteerDropdown() {
+            const select = document.getElementById('volunteer-name-select');
+            if (!select) return;
+
+            fetch('http://localhost:3000/api/volunteers')
+            .then(response => response.json())
+            .then(volunteers => {
+                const filteredVolunteers = volunteers.filter(v => v.role !== 'planner');
+                select.innerHTML = '<option value="" disabled selected>Select Volunteer</option>';
+
+                filteredVolunteers
+                    .sort((a, b) => a.name.localeCompare(b.name))
+                    .forEach(v => {
+                        const option = document.createElement('option');
+                        option.value = v.name;
+                        option.textContent = `${v.name} (PI: ${v.passionIndex})`;
+                        option.dataset.id = v.id;
+                        select.appendChild(option);
+                    });
+            })
+            .catch(error => {
+                console.error('Error fetching volunteers:', error);
+            });
+        }
+
+        function populateActivityDropdown() {
+            const select = document.getElementById('activity-id-select');
+            if (!select) return;
+
+            fetch('http://localhost:3000/api/activities')
+            .then(response => response.json())
+            .then(activities => {
+                select.innerHTML = '<option value="" disabled selected>Select Activity</option>';
+
+                activities
+                    .sort((a, b) => new Date(b.date) - new Date(a.date))
+                    .forEach(activity => {
+                        const option = document.createElement('option');
+                        option.value = activity.id;
+                        option.textContent = `${activity.name} (${activity.date})`;
+                        select.appendChild(option);
+                    });
+            })
+            .catch(error => {
+                console.error('Error fetching activities:', error);
+            });
+        }
+
+        function handleAppraisalSubmit(event) {
+            event.preventDefault();
+            const form = event.target;
+            const formData = new FormData(form);
+
+            const volunteerSelect = document.getElementById('volunteer-name-select');
+            const activitySelect = document.getElementById('activity-id-select');
+            if (!volunteerSelect || !activitySelect) {
+                showMessageBox('Unable to load volunteers or activities. Please refresh and try again.', true);
+                return;
+            }
+
+            const volunteerName = formData.get('volunteer-name')?.trim();
+            const activityId = formData.get('activity-id');
+            const passionEffect = parseInt(formData.get('passion-effect'), 10);
+            const comment = formData.get('comment');
+
+            if (!volunteerName || !activityId || Number.isNaN(passionEffect)) {
+                showMessageBox('Please ensure the volunteer, activity, and Passion Index effect are selected.', true);
+                return;
+            }
+
+            const selectedOption = volunteerSelect.options[volunteerSelect.selectedIndex];
+            const volunteerId = selectedOption?.dataset?.id;
+
+            if (!volunteerId) {
+                showMessageBox(`Volunteer "${volunteerName}" not found.`, true);
+                return;
+            }
+
+            fetch('http://localhost:3000/api/appraisals', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    volunteerId,
+                    activityId,
+                    passionIndexEffect: passionEffect,
+                    comment
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    showMessageBox(data.error, true);
+                    return;
+                }
+
+                triggerPassionPowerUp(passionEffect);
+                form.reset();
+                populateVolunteerDropdown();
+                populateActivityDropdown();
+                renderAppraisals();
+
+                const newIndex = typeof data.newPassionIndex === 'number' ? data.newPassionIndex : 'updated';
+                const sentiment = passionEffect >= 0 ? 'boost' : 'correction';
+                showMessageBox(`Index for ${volunteerName} updated! They feel the ${sentiment}. New Index: ${newIndex}.`);
+            })
+            .catch(error => {
+                console.error('Error saving appraisal:', error);
+                showMessageBox('An error occurred while submitting the appraisal. Please try again.', true);
+            });
+        }
+
+        window.autoAllocate = function(activityId, roleNeeded) {
+            // Fetch volunteers from backend API
+            fetch('http://localhost:3000/api/volunteers')
+            .then(response => response.json())
+            .then(volunteers => {
+                // Fetch activities from backend API
+                fetch(`http://localhost:3000/api/activities/${activityId}`)
+                .then(response => response.json())
+                .then(activity => {
+                    const remaining = activity.requiredVolunteers - activity.assignedVolunteerIds.length;
+                    if (remaining <= 0) return;
+
+                    // Find the best available volunteers matching the role, sorted by passion
+                    const suitableVolunteers = volunteers
+                        .filter(v => v.role === roleNeeded && !v.assignedActivityId)
+                        .sort((a, b) => b.passionIndex - a.passionIndex);
+
+                    const volunteersToAssign = suitableVolunteers.slice(0, remaining);
+
+                    if (volunteersToAssign.length === 0) {
+                        showMessageBox(`No available ${roleNeeded} volunteers to assign for this activity.`, true);
+                        return;
+                    }
+
+                    // Perform Assignment for each volunteer
+                    let assignedCount = 0;
+                    volunteersToAssign.forEach(volunteer => {
+                        // Make registration request for each volunteer
+                        fetch(`http://localhost:3000/api/activities/${activityId}/register/${volunteer.id}`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            }
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.error) {
+                                console.error(`Error assigning volunteer ${volunteer.name}:`, data.error);
+                            } else {
+                                assignedCount++;
+                            }
+
+                            // When all assignments are processed, update the UI
+                            if (assignedCount === volunteersToAssign.length) {
+                                showMessageBox(`${assignedCount} volunteers successfully allocated to ${activity.name}!`);
+                                renderAllocationDashboard(); // Refresh UI
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error during assignment:', error);
+                        });
+                    });
+                })
+                .catch(error => {
+                    console.error('Error fetching activity:', error);
+                });
+            })
+            .catch(error => {
+                console.error('Error fetching volunteers:', error);
+            });
+        }
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            renderCalendar(currentCalendarDate);
+            renderAllocationDashboard();
+            renderAppraisals();
+            populateVolunteerDropdown();
+            populateActivityDropdown();
+
+            const activityForm = document.getElementById('activity-form');
+            if (activityForm) {
+                activityForm.addEventListener('submit', handleActivitySubmit);
+            }
+
+            const appraisalForm = document.getElementById('appraisal-form');
+            if (appraisalForm) {
+                appraisalForm.addEventListener('submit', handleAppraisalSubmit);
+            }
+
+            const closeButton = document.getElementById('close-message-box');
+            if (closeButton) {
+                closeButton.addEventListener('click', () => {
+                    const messageBox = document.getElementById('message-box');
+                    if (messageBox) {
+                        messageBox.classList.add('hidden');
+                    }
+                });
+            }
+
+            initResponsiveNav();
+        });
+    </script>
+</head>
+<body>
+    <div id="message-box" class="fixed inset-0 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center z-50 hidden">
+        <div class="glass-card glass-card--light w-80 text-center" id="message-box-card">
+            <p id="message-box-text" class="text-lg font-semibold text-slate-800 mb-4"></p>
+            <button id="close-message-box" class="btn btn-primary w-full justify-center">OK</button>
+        </div>
+    </div>
+    
+    <header class="site-header">
+        <div class="nav-container" data-menu-open="false">
+            <a class="brand-link" href="index.html">
+                <span class="brand-emblem"><i class="fa-solid fa-bicycle"></i></span>
+                <span>Ageless Bicyclists</span>
+            </a>
+            <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="primary-navigation">
+                <span class="sr-only">Toggle navigation</span>
+                <i class="fa-solid fa-bars"></i>
+            </button>
+            <nav id="primary-navigation" class="nav-list">
+                <a href="index.html" class="nav-link">Home</a>
+                <a href="signup.html" class="nav-link">Join</a>
+                <a href="dashboard.html" class="nav-link">Dashboard</a>
+                <a href="events.html" class="nav-link">Events</a>
+                <a href="stories.html" class="nav-link">Stories</a>
+                <a href="buddy-matching.html" class="nav-link">Matching</a>
+                <a href="vr-training.html" class="nav-link">VR Training</a>
+                <a href="onboarding.html" class="nav-link">Resources</a>
+                <a href="admin.html" class="nav-link nav-link--active">Admin</a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="page-shell">
+        <section class="hero-card">
+            <div class="space-y-5">
+                <span class="hero-eyebrow"><i class="fa-solid fa-screwdriver-wrench"></i> Operations cockpit</span>
+                <h1 class="hero-title">Coordinate rides, allocate volunteers, and celebrate impact.</h1>
+                <p class="hero-summary">Keep our community humming with a birds-eye view of activities, staffing, and appraisal insights—all in one streamlined workspace.</p>
+                <div class="metric-ticker">
+                    <article class="metric-card">
+                        <span class="metric-label">Live activities</span>
+                        <p class="text-sm text-slate-600 mt-2">Create, edit, and monitor every ride or clinic from the same toolkit.</p>
+                    </article>
+                    <article class="metric-card">
+                        <span class="metric-label">Smart matching</span>
+                        <p class="text-sm text-slate-600 mt-2">Auto-allocate volunteers based on Passion Index and role fit.</p>
+                    </article>
+                    <article class="metric-card">
+                        <span class="metric-label">Feedback loop</span>
+                        <p class="text-sm text-slate-600 mt-2">Track appraisals to fuel coaching, recognition, and growth.</p>
+                    </article>
+                </div>
+            </div>
+
+            <div class="glass-card glass-card--light lg:max-w-xl">
+                <span class="tag"><i class="fa-solid fa-calendar-plus"></i> New activity</span>
+                <h2 class="mt-4 text-2xl font-extrabold text-slate-900">Create an event</h2>
+                <p class="text-slate-600 mt-2">Spin up fresh missions in seconds and keep the calendar stocked with joyful rides.</p>
+                <form id="activity-form" class="space-y-4 mt-6">
+                    <label class="block space-y-2">
+                        <span class="text-sm font-semibold text-slate-700">Activity name</span>
+                        <input type="text" name="activity-name" required class="w-full rounded-xl border border-slate-200 bg-white/85 px-3 py-3 focus:outline-none focus:ring-2 focus:ring-sky-400">
+                    </label>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <label class="block space-y-2">
+                            <span class="text-sm font-semibold text-slate-700">Date</span>
+                            <input type="date" name="activity-date" required class="w-full rounded-xl border border-slate-200 bg-white/85 px-3 py-3 focus:outline-none focus:ring-2 focus:ring-sky-400">
+                        </label>
+                        <label class="block space-y-2">
+                            <span class="text-sm font-semibold text-slate-700">Volunteers needed</span>
+                            <input type="number" name="required-vols" min="1" required class="w-full rounded-xl border border-slate-200 bg-white/85 px-3 py-3 focus:outline-none focus:ring-2 focus:ring-sky-400">
+                        </label>
+                    </div>
+                    <label class="block space-y-2">
+                        <span class="text-sm font-semibold text-slate-700">Role required</span>
+                        <select name="role-needed" required class="w-full rounded-xl border border-slate-200 bg-white/85 px-3 py-3 focus:outline-none focus:ring-2 focus:ring-sky-400">
+                            <option value="cycling-buddy">Cycling Buddy</option>
+                            <option value="logistics-support">Logistics Support</option>
+                            <option value="mechanic">Mechanic</option>
+                        </select>
+                    </label>
+                    <label class="block space-y-2">
+                        <span class="text-sm font-semibold text-slate-700">Description</span>
+                        <textarea name="activity-description" rows="3" placeholder="Describe the activity..." class="w-full rounded-xl border border-slate-200 bg-white/85 px-3 py-3 focus:outline-none focus:ring-2 focus:ring-sky-400"></textarea>
+                    </label>
+                    <button type="submit" class="btn btn-primary w-full justify-center"><i class="fa-solid fa-plus"></i> Add activity</button>
+                </form>
+            </div>
+        </section>
+
+        <section class="glass-card glass-card--light relative overflow-hidden">
+            <div id="passion-power-up-container" class="absolute inset-0 pointer-events-none"></div>
+            <div class="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+                <div class="space-y-4 max-w-xl">
+                    <span class="tag"><i class="fa-solid fa-fire"></i> Volunteer mission control</span>
+                    <h2 class="text-3xl font-extrabold text-slate-900">Adjust Passion Index in seconds</h2>
+                    <p class="text-slate-600">Capture micro-appraisals right after events to keep the allocation engine accurate. Scores update instantly across the dashboard and matching tools.</p>
+                    <ul class="space-y-3 text-slate-600">
+                        <li class="flex gap-3 items-start">
+                            <i class="fa-solid fa-gauge-high text-sky-600 mt-1"></i>
+                            <span><strong>Spotlight top performers</strong> by adding quick boosts when volunteers deliver standout support.</span>
+                        </li>
+                        <li class="flex gap-3 items-start">
+                            <i class="fa-solid fa-arrows-rotate text-sky-600 mt-1"></i>
+                            <span><strong>Course-correct early</strong> with gentle downticks and notes that inform coaching conversations.</span>
+                        </li>
+                        <li class="flex gap-3 items-start">
+                            <i class="fa-solid fa-share text-sky-600 mt-1"></i>
+                            <span><strong>Sync insights across teams</strong> so planners, buddies, and mechanics see the latest readiness score.</span>
+                        </li>
+                    </ul>
+                </div>
+                <form id="appraisal-form" class="relative z-10 w-full lg:max-w-md space-y-4 bg-white/95 border border-slate-200 rounded-2xl shadow-xl p-6">
+                    <div>
+                        <span class="tag"><i class="fa-solid fa-bolt"></i> Record appraisal</span>
+                        <p class="text-sm text-slate-600 mt-2">Submit feedback after every ride or workshop.</p>
+                    </div>
+                    <label class="block space-y-2">
+                        <span class="text-sm font-semibold text-slate-700">Volunteer</span>
+                        <select id="volunteer-name-select" name="volunteer-name" required class="w-full rounded-xl border border-slate-200 bg-white/90 px-3 py-3 focus:outline-none focus:ring-2 focus:ring-sky-400">
+                            <option value="" disabled selected>Select Volunteer (Current PI)</option>
+                        </select>
+                    </label>
+                    <label class="block space-y-2">
+                        <span class="text-sm font-semibold text-slate-700">Mission completed</span>
+                        <select id="activity-id-select" name="activity-id" required class="w-full rounded-xl border border-slate-200 bg-white/90 px-3 py-3 focus:outline-none focus:ring-2 focus:ring-sky-400">
+                            <option value="" disabled selected>Select Activity</option>
+                        </select>
+                    </label>
+                    <label class="block space-y-2">
+                        <span class="text-sm font-semibold text-slate-700">Index effect</span>
+                        <select name="passion-effect" required class="w-full rounded-xl border border-slate-200 bg-white/90 px-3 py-3 font-semibold text-center focus:outline-none focus:ring-2 focus:ring-sky-400">
+                            <option value="10" class="text-green-600">+10 🔥 Legendary Performance!</option>
+                            <option value="5" class="text-green-500">+5 Great Job!</option>
+                            <option value="0" selected class="text-gray-600">0 Standard Mission Success</option>
+                            <option value="-5" class="text-red-500">-5 Needs Follow-Up</option>
+                            <option value="-10" class="text-red-600">-10 Major Issue</option>
+                        </select>
+                    </label>
+                    <label class="block space-y-2">
+                        <span class="text-sm font-semibold text-slate-700">Appraisal notes</span>
+                        <textarea name="comment" rows="3" placeholder="Provide feedback to justify the index change..." class="w-full rounded-xl border border-slate-200 bg-white/90 px-3 py-3 focus:outline-none focus:ring-2 focus:ring-sky-400"></textarea>
+                    </label>
+                    <button type="submit" class="btn btn-high-contrast w-full justify-center">
+                        <i class="fa-solid fa-bolt"></i> Update Passion Index
+                    </button>
+                </form>
+            </div>
+        </section>
+
+        <section class="glass-card glass-card--light overflow-hidden">
+            <div class="flex flex-wrap items-center justify-between gap-4">
+                <div>
+                    <span class="tag"><i class="fa-solid fa-calendar-days"></i> Calendar overview</span>
+                    <h2 class="mt-3 text-2xl font-extrabold text-slate-900">Monthly mission map</h2>
+                    <p class="text-slate-600 mt-2">Hover over dates to see staffing at a glance and spot opportunities to fill.</p>
+                </div>
+                <div id="calendar-header" class="flex items-center gap-3">
+                    <!-- Header generated by JS -->
+                </div>
+            </div>
+            <div id="calendar-grid" class="grid grid-cols-7 gap-1 text-center mt-6">
+                <!-- Calendar cells generated by JS -->
+            </div>
+        </section>
+
+        <section class="glass-card glass-card--light">
+            <span class="tag"><i class="fa-solid fa-people-arrows"></i> Allocation engine</span>
+            <h2 class="mt-3 text-2xl font-extrabold text-slate-900">Match talent to missions</h2>
+            <p class="text-slate-600 mt-2">System ranks volunteers by Passion Index so you can instantly fill the right roles.</p>
+            <ul id="allocation-list" class="space-y-3 mt-6">
+                <li class="empty-state">Loading activities...</li>
+            </ul>
+        </section>
+
+        <section class="glass-card glass-card--light table-card">
+            <div class="flex flex-wrap items-center justify-between gap-4">
+                <div>
+                    <span class="tag"><i class="fa-solid fa-ranking-star"></i> Volunteer Leaderboard (Allocation Metric)</span>
+                    <h2 class="mt-3 text-2xl font-extrabold text-slate-900">Top volunteers by Passion Index</h2>
+                    <p class="text-slate-600 mt-2">Volunteers with highest scores are prioritized for allocation.</p>
+                </div>
+            </div>
+            <div class="overflow-x-auto mt-6">
+                <table class="min-w-full divide-y divide-slate-200">
+                    <thead class="bg-slate-100/80">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">Volunteer</th>
+                            <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">Passion Index</th>
+                            <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">Assignment status</th>
+                            <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">Preferred role</th>
+                        </tr>
+                    </thead>
+                    <tbody id="leaderboard-body" class="bg-white divide-y divide-slate-100">
+                        <!-- Content generated by JS -->
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="glass-card glass-card--light table-card">
+            <div class="flex flex-wrap items-center justify-between gap-4">
+                <div>
+                    <span class="tag"><i class="fa-solid fa-comments"></i> Appraisal records</span>
+                    <h2 class="mt-3 text-2xl font-extrabold text-slate-900">Feedback that fuels growth</h2>
+                    <p class="text-slate-600 mt-2">Log and review notes from senior planners to keep the Passion Index tuned and transparent.</p>
+                </div>
+            </div>
+            <div class="overflow-x-auto mt-6">
+                <table class="min-w-full divide-y divide-slate-200">
+                    <thead class="bg-slate-100/80">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">Volunteer</th>
+                            <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">Activity</th>
+                            <th class="px-6 py-3 text-center text-xs font-semibold uppercase tracking-wider text-slate-600">Effect</th>
+                            <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">Comment</th>
+                            <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">Date</th>
+                        </tr>
+                    </thead>
+                    <tbody id="appraisal-body" class="bg-white divide-y divide-slate-100">
+                        <!-- Appraisal content generated by JS -->
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <footer class="site-footer">
+        &copy; 2025 Ageless Bicyclists · Anchor Platform · Admin Dashboard
+    </footer>
+</body>
+</html>

@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Join as Volunteer - Anchor by Ageless Bicyclists</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==" crossorigin="anonymous" referrerpolicy="no-referrer">
+    <link rel="stylesheet" href="../style/styles.css">
+    <script>
+        const CURRENT_USER_ID_KEY = 'CURRENT_USER_ID';
+
+        const ROLE_DATA = {
+            'cycling-buddy': {
+                name: 'Cycling Buddy',
+                icon: '🚴‍♀️',
+                description: 'Ride alongside participants with ASD, providing encouragement and ensuring safety during inclusive cycling sessions.'
+            },
+            'logistics-support': {
+                name: 'Logistics Pro',
+                icon: '📦',
+                description: 'Help with event setup, equipment management, and coordination to ensure smooth cycling sessions.'
+            },
+            'mechanic': {
+                name: 'Bike Mechanic',
+                icon: '🔧',
+                description: 'Maintain and repair bicycles and adaptive equipment to keep our fleet running safely.'
+            },
+            'planner': {
+                name: 'Program Planner',
+                icon: '🗓️',
+                description: 'Design sensory-friendly cycling routes and coordinate session schedules for ASD participants.'
+            }
+        };
+
+        function initResponsiveNav() {
+            const navContainer = document.querySelector('.nav-container');
+            const toggle = document.querySelector('.nav-toggle');
+            const navList = document.getElementById('primary-navigation');
+            if (!navContainer || !toggle || !navList) return;
+
+            const toggleIcon = toggle.querySelector('i');
+
+            const closeMenu = () => {
+                navContainer.dataset.menuOpen = 'false';
+                toggle.setAttribute('aria-expanded', 'false');
+                if (toggleIcon) {
+                    toggleIcon.classList.add('fa-bars');
+                    toggleIcon.classList.remove('fa-xmark');
+                }
+            };
+
+            toggle.addEventListener('click', (event) => {
+                event.stopPropagation();
+                const isOpen = navContainer.dataset.menuOpen === 'true';
+                const nextState = !isOpen;
+                navContainer.dataset.menuOpen = String(nextState);
+                toggle.setAttribute('aria-expanded', String(nextState));
+                if (toggleIcon) {
+                    toggleIcon.classList.toggle('fa-bars', !nextState);
+                    toggleIcon.classList.toggle('fa-xmark', nextState);
+                }
+            });
+
+            document.addEventListener('click', (event) => {
+                if (!navContainer.contains(event.target)) {
+                    closeMenu();
+                }
+            });
+
+            navList.querySelectorAll('a').forEach((link) => {
+                link.addEventListener('click', () => closeMenu());
+            });
+
+            window.addEventListener('resize', () => {
+                if (window.innerWidth > 640) {
+                    closeMenu();
+                }
+            });
+
+            closeMenu();
+        }
+
+        function showMessageBox(message, isError = false) {
+            const messageBox = document.getElementById('message-box');
+            const messageCard = document.getElementById('message-box-card');
+            const messageText = document.getElementById('message-box-text');
+            const messageTitle = document.getElementById('message-box-title');
+
+            if (messageText) {
+                messageText.textContent = message;
+            }
+
+            if (messageTitle) {
+                messageTitle.textContent = isError ? 'Action needed' : 'All set!';
+            }
+            
+            if (messageCard) {
+                if (isError) {
+                    messageCard.classList.add('border-2', 'border-red-400');
+                } else {
+                    messageCard.classList.remove('border-2', 'border-red-400');
+                }
+            }
+            
+            if (messageBox) {
+                messageBox.classList.remove('hidden');
+            }
+        }
+
+        function handleSignUp(event) {
+            event.preventDefault();
+            const form = event.target;
+            const formData = new FormData(form);
+
+            // Get skills and split into array if provided
+            const skillsText = formData.get('skills') || '';
+            const skillsArray = skillsText ? skillsText.split(',').map(s => s.trim()).filter(s => s) : [];
+
+            const volunteerData = {
+                name: formData.get('name'),
+                email: formData.get('email'),
+                skills: skillsArray,
+                commitmentPreferences: formData.get('availability') || '',
+                role: formData.get('role')
+            };
+
+            // Validate role is selected
+            if (!volunteerData.role) {
+                showMessageBox("Please select a role before submitting.", true);
+                return;
+            }
+
+            console.log('Submitting volunteer data:', volunteerData);
+
+            fetch('http://localhost:3000/api/volunteers', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(volunteerData)
+            })
+            .then(response => {
+                console.log('Response status:', response.status);
+                if (!response.ok) {
+                    return response.json().then(err => {
+                        throw new Error(err.error || 'Registration failed');
+                    });
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log('Registration successful:', data);
+                localStorage.setItem(CURRENT_USER_ID_KEY, data.id);
+                console.log('Stored user ID:', data.id);
+
+                const currentUrl = new URL(window.location.href);
+                if (currentUrl.pathname.endsWith('signup.html')) {
+                    currentUrl.pathname = currentUrl.pathname.replace('signup.html', 'dashboard.html');
+                    window.location.href = currentUrl.toString();
+                } else {
+                    window.location.href = 'dashboard.html';
+                }
+            })
+            .catch(error => {
+                console.error('Registration error:', error);
+                showMessageBox(error.message || "An error occurred during registration. Please try again.", true);
+            });
+        }
+
+        function selectRole(roleKey) {
+            const roleInput = document.getElementById('selected-role-input');
+            const roleButtons = document.querySelectorAll('.role-button');
+            const roleDescriptionDiv = document.getElementById('role-description');
+            
+            roleInput.value = roleKey || '';
+
+            roleButtons.forEach(button => {
+                button.classList.remove('ring-4', 'ring-offset-2', 'ring-sky-500', 'shadow-xl', 'bg-sky-50', 'border-sky-500');
+                button.classList.add('bg-white', 'border-slate-200');
+            });
+
+            if (roleKey) {
+                const activeButton = document.getElementById(`role-${roleKey}`);
+                if (activeButton) {
+                    activeButton.classList.remove('bg-white', 'border-slate-200');
+                    activeButton.classList.add('ring-4', 'ring-offset-2', 'ring-sky-500', 'shadow-xl', 'bg-sky-50', 'border-sky-500');
+                    
+                    const roleData = ROLE_DATA[roleKey];
+                    roleDescriptionDiv.innerHTML = `
+                        <div class="flex items-center space-x-3 mb-2">
+                            <span class="text-3xl">${roleData.icon}</span>
+                            <h3 class="text-xl font-bold text-slate-900">${roleData.name}</h3>
+                        </div>
+                        <p class="text-slate-700">${roleData.description}</p>
+                        <p class="text-xs text-green-600 mt-3"><i class="fa-solid fa-check-circle"></i> Role selected!</p>
+                    `;
+                    roleDescriptionDiv.classList.remove('hidden');
+                }
+            } else {
+                roleDescriptionDiv.innerHTML = `
+                    <p class="text-slate-500 italic"><i class="fa-solid fa-hand-point-up"></i> Select a role above to see its description</p>
+                `;
+                roleDescriptionDiv.classList.remove('hidden');
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const signUpForm = document.getElementById('signup-form');
+            if (signUpForm) {
+                signUpForm.addEventListener('submit', handleSignUp);
+            }
+            
+            const messageButton = document.getElementById('message-box-button');
+            if (messageButton) {
+                messageButton.addEventListener('click', () => {
+                    document.getElementById('message-box').classList.add('hidden');
+                });
+            }
+
+            selectRole(null);
+            initResponsiveNav();
+        });
+    </script>
+<body>
+    <!-- Message Modal -->
+    <div id="message-box" class="fixed inset-0 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center z-50 hidden">
+        <div id="message-box-card" class="glass-card glass-card--light max-w-md w-full mx-4">
+            <div class="flex items-center justify-between mb-4">
+                <h3 id="message-box-title" class="text-xl font-extrabold text-slate-900"></h3>
+                <button onclick="document.getElementById('message-box').classList.add('hidden')" class="text-slate-500 hover:text-slate-700">
+                    <i class="fa-solid fa-xmark text-2xl"></i>
+                </button>
+            </div>
+            <p id="message-box-text" class="text-slate-600"></p>
+            <button id="message-box-button" onclick="document.getElementById('message-box').classList.add('hidden')" class="btn btn-primary w-full justify-center mt-6">
+                OK
+            </button>
+        </div>
+    </div>
+
+    <header class="site-header">
+        <div class="nav-container" data-menu-open="false">
+            <a class="brand-link" href="index.html">
+                <span class="brand-emblem"><i class="fa-solid fa-bicycle"></i></span>
+                <span>Ageless Bicyclists</span>
+            </a>
+            <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="primary-navigation">
+                <span class="sr-only">Toggle navigation</span>
+                <i class="fa-solid fa-bars"></i>
+            </button>
+            <nav id="primary-navigation" class="nav-list">
+                <a href="index.html" class="nav-link">Home</a>
+                <a href="signup.html" class="nav-link nav-link--active">Join</a>
+                <a href="dashboard.html" class="nav-link">Dashboard</a>
+                <a href="events.html" class="nav-link">Events</a>
+                <a href="stories.html" class="nav-link">Stories</a>
+                <a href="buddy-matching.html" class="nav-link">Matching</a>
+                <a href="vr-training.html" class="nav-link">VR Training</a>
+                <a href="admin.html" class="nav-link">Admin</a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="page-shell">
+        <section class="hero-card">
+            <article class="space-y-5">
+                <span class="hero-eyebrow"><i class="fa-solid fa-bicycle"></i> Become a cycling buddy</span>
+                <h1 class="hero-title">Join Singapore's first ASD-focused cycling program</h1>
+                <p class="hero-summary">Whether you're a cycling enthusiast, logistics coordinator, bike mechanic, or program planner—Ageless Bicyclists needs your unique skills to create life-changing experiences for individuals with autism spectrum disorder.</p>
+            </article>
+
+            <div class="glass-card glass-card--light">
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div class="text-center">
+                        <div class="text-3xl mb-2">⚡</div>
+                        <h3 class="font-bold text-slate-900">5-min registration</h3>
+                        <p class="text-sm text-slate-600 mt-1">Quick and easy sign-up</p>
+                    </div>
+                    <div class="text-center">
+                        <div class="text-3xl mb-2">🎯</div>
+                        <h3 class="font-bold text-slate-900">Smart matching</h3>
+                        <p class="text-sm text-slate-600 mt-1">Paired with compatible buddies</p>
+                    </div>
+                    <div class="text-center">
+                        <div class="text-3xl mb-2">🥽</div>
+                        <h3 class="font-bold text-slate-900">VR training</h3>
+                        <p class="text-sm text-slate-600 mt-1">Prepare for real situations</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="glass-card glass-card--light max-w-4xl mx-auto">
+            <h2 class="text-3xl font-extrabold text-slate-900 mb-6">Create your account</h2>
+            
+            <form id="signup-form" class="space-y-6">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 mb-2">Full Name <span class="text-red-500">*</span></label>
+                        <input type="text" name="name" required 
+                            class="w-full rounded-xl border border-slate-200 bg-white/85 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-purple-400"
+                            placeholder="Your full name">
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 mb-2">Email Address <span class="text-red-500">*</span></label>
+                        <input type="email" name="email" required 
+                            class="w-full rounded-xl border border-slate-200 bg-white/85 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-purple-400"
+                            placeholder="your.email@example.com">
+                    </div>
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-semibold text-slate-700 mb-2">Skills & Experience</label>
+                    <textarea name="skills" rows="3"
+                        class="w-full rounded-xl border border-slate-200 bg-white/85 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-purple-400"
+                        placeholder="Tell us about your relevant skills, cycling experience, or work with individuals with ASD..."></textarea>
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-semibold text-slate-700 mb-2">Availability</label>
+                    <input type="text" name="availability"
+                        class="w-full rounded-xl border border-slate-200 bg-white/85 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-purple-400"
+                        placeholder="e.g., Weekends, Tuesday evenings, flexible">
+                </div>
+
+                <div>
+                    <label class="block text-sm font-semibold text-slate-700 mb-3">Choose your role <span class="text-red-500">*</span></label>
+                    <input type="hidden" name="role" id="selected-role-input" required>
+                    
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div id="role-cycling-buddy" onclick="selectRole('cycling-buddy')" 
+                            class="role-tile role-button cursor-pointer rounded-xl border-2 border-slate-200 bg-white/85 p-6 hover:border-purple-400 transition-all">
+                            <div class="text-4xl mb-2">🚴‍♀️</div>
+                            <h3 class="font-bold text-slate-900">Cycling Buddy</h3>
+                            <p class="text-sm text-slate-600 mt-1">Ride alongside participants</p>
+                        </div>
+                        
+                        <div id="role-logistics-support" onclick="selectRole('logistics-support')" 
+                            class="role-tile role-button cursor-pointer rounded-xl border-2 border-slate-200 bg-white/85 p-6 hover:border-purple-400 transition-all">
+                            <div class="text-4xl mb-2">📦</div>
+                            <h3 class="font-bold text-slate-900">Logistics Pro</h3>
+                            <p class="text-sm text-slate-600 mt-1">Coordinate events & equipment</p>
+                        </div>
+                        
+                        <div id="role-mechanic" onclick="selectRole('mechanic')" 
+                            class="role-tile role-button cursor-pointer rounded-xl border-2 border-slate-200 bg-white/85 p-6 hover:border-purple-400 transition-all">
+                            <div class="text-4xl mb-2">🔧</div>
+                            <h3 class="font-bold text-slate-900">Bike Mechanic</h3>
+                            <p class="text-sm text-slate-600 mt-1">Maintain & repair bikes</p>
+                        </div>
+                        
+                        <div id="role-planner" onclick="selectRole('planner')" 
+                            class="role-tile role-button cursor-pointer rounded-xl border-2 border-slate-200 bg-white/85 p-6 hover:border-purple-400 transition-all">
+                            <div class="text-4xl mb-2">🗓️</div>
+                            <h3 class="font-bold text-slate-900">Program Planner</h3>
+                            <p class="text-sm text-slate-600 mt-1">Design inclusive activities</p>
+                        </div>
+                    </div>
+                    
+                    <div id="role-description" class="mt-4 p-4 rounded-xl bg-purple-50 border border-purple-200 hidden">
+                        <p class="text-sm text-slate-700"></p>
+                    </div>
+                </div>
+                
+                <button type="submit" class="btn btn-primary w-full justify-center text-lg py-4">
+                    <i class="fa-solid fa-user-plus"></i> Create Account & Start Journey
+                </button>
+            </form>
+        </section>
+    </main>
+
+    <footer class="site-footer">
+        &copy; 2025 Ageless Bicyclists · Anchor Platform · Where every volunteer becomes a catalyst for change
+    </footer>
+</body>
+</html>
