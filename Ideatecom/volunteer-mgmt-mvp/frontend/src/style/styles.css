@@ -1238,6 +1238,109 @@ main {
   opacity: 0.5;
 }
 
+.story-card__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+  margin-top: 1rem;
+}
+
+.story-card__reactions {
+  display: inline-flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.story-card__reaction {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-weight: 600;
+  transition: color 0.2s ease, transform 0.2s ease;
+}
+
+.story-card__reaction--heart {
+  color: #be123c;
+}
+
+.story-card__reaction--inspired {
+  color: #7c3aed;
+}
+
+.story-card__reaction:hover {
+  transform: translateY(-1px);
+}
+
+.story-card__meta {
+  margin-top: 0.75rem;
+}
+
+.story-share {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.story-share__label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(71, 85, 105, 0.9);
+  font-weight: 700;
+  margin-right: 0.1rem;
+}
+
+.story-share__button {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #4338ca;
+  background: rgba(99, 102, 241, 0.12);
+  transition: transform 0.18s ease, box-shadow 0.2s ease, color 0.2s ease;
+}
+
+.story-share__button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 28px -14px rgba(99, 102, 241, 0.45);
+}
+
+.story-share__button--facebook {
+  color: #2563eb;
+}
+
+.story-share__button--x {
+  color: #0f172a;
+  background: rgba(15, 23, 42, 0.08);
+}
+
+.story-share__button--linkedin {
+  color: #0a66c2;
+}
+
+.story-share__button--whatsapp {
+  color: #16a34a;
+}
+
+.story-share__button--copy {
+  color: #6b21a8;
+}
+
+.story-share__button:focus-visible {
+  outline: 2px solid rgba(129, 140, 248, 0.65);
+  outline-offset: 2px;
+}
+
+.story-share__button i {
+  font-size: 0.9rem;
+}
+
 /* Buddy Matching Specific Styles */
 .line-clamp-4 {
   display: -webkit-box;
