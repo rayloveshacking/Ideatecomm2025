@@ -605,8 +605,10 @@ main {
 
 .chatbot {
   position: fixed;
-  bottom: clamp(20px, 5vw, 48px);
+  bottom: calc(env(safe-area-inset-bottom, 0) + clamp(20px, 5vw, 48px));
   right: clamp(16px, 4vw, 32px);
+  top: auto;
+  left: auto;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -650,6 +652,9 @@ main {
 }
 
 .chatbot__panel {
+  position: absolute;
+  bottom: calc(100% + 12px);
+  right: 0;
   width: min(360px, calc(100vw - 32px));
   max-height: min(520px, 80vh);
   display: flex;
@@ -660,6 +665,7 @@ main {
   box-shadow: var(--shadow-soft);
   opacity: 0;
   transform: translateY(16px) scale(0.98);
+  transform-origin: bottom right;
   pointer-events: none;
   transition: opacity 0.25s ease, transform 0.25s ease;
   overflow: hidden;
@@ -667,7 +673,7 @@ main {
 
 @media (max-width: 640px) {
   .chatbot {
-    bottom: clamp(16px, 4vw, 28px);
+    bottom: calc(env(safe-area-inset-bottom, 0) + clamp(16px, 4vw, 28px));
     right: 16px;
     left: auto;
   }
@@ -690,7 +696,6 @@ main {
 
   .chatbot__panel {
     width: min(340px, calc(100vw - 32px));
-    align-self: flex-end;
   }
 }
 
