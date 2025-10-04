@@ -31,9 +31,9 @@
     wrapper.className = 'chatbot';
     wrapper.setAttribute('data-anchor-chatbot', 'true');
     wrapper.innerHTML = `
-      <button id="chatbot-toggle" class="chatbot__toggle" type="button" aria-haspopup="dialog" aria-expanded="false">
+      <button id="chatbot-toggle" class="chatbot__toggle" type="button" aria-haspopup="dialog" aria-expanded="false" aria-label="Open Anchor assistant chat">
         <i class="fa-solid fa-robot"></i>
-        <span>Ask Anchor</span>
+        <span class="chatbot__toggle-text">Ask Anchor</span>
       </button>
       <section id="chatbot-panel" class="chatbot__panel" aria-hidden="true" aria-label="Anchor assistant chat panel">
         <header class="chatbot__header">
