@@ -1,9 +1,18 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const axios = require('axios');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+const GEMINI_MODEL_ID = 'gemini-2.5-flash';
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || 'AIzaSyCeBxlo9rdklIqsMeeTIMXgA2HSFa0yzNc';
+const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL_ID}:generateContent`;
+
+if (!process.env.GEMINI_API_KEY) {
+  console.warn('Warning: GEMINI_API_KEY environment variable is not set. Falling back to the bundled demo key.');
+}
 
 // Middleware
 app.use(cors());
@@ -1081,13 +1090,83 @@ app.post('/api/vr-progress', (req, res) => {
   res.status(existingIndex >= 0 ? 200 : 201).json(progressRecord);
 });
 
+// ==================== AI ASSISTANT ====================
+
+app.post('/api/chatbot', async (req, res) => {
+  const { message, history } = req.body || {};
+
+  if (!GEMINI_API_KEY) {
+    return res.status(500).json({ error: 'AI assistant is not configured. Please contact an administrator.' });
+  }
+
+  if (typeof message !== 'string' || !message.trim()) {
+    return res.status(400).json({ error: 'A non-empty message is required.' });
+  }
+
+  const sanitizedHistory = Array.isArray(history) ? history.slice(-10) : [];
+
+  const contents = sanitizedHistory
+    .filter(item => item && typeof item.text === 'string' && item.text.trim())
+    .map(item => {
+      const trimmedText = item.text.trim();
+      return {
+        role: item.role === 'model' ? 'model' : 'user',
+        parts: [{ text: trimmedText }]
+      };
+    });
+
+  contents.push({
+    role: 'user',
+    parts: [{ text: message.trim() }]
+  });
+
+  try {
+    const response = await axios.post(
+      GEMINI_API_URL,
+      { contents },
+      {
+        params: { key: GEMINI_API_KEY },
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        timeout: 15000
+      }
+    );
+
+    const candidate = response.data?.candidates?.[0];
+    const replyText = candidate?.content?.parts?.map(part => part.text).join('\n').trim();
+
+    if (!replyText) {
+      return res.status(502).json({ error: 'The assistant did not return a response. Please try again.' });
+    }
+
+    res.json({ reply: replyText });
+  } catch (error) {
+    const status = error.response?.status;
+    const apiMessage = error.response?.data?.error?.message;
+    console.error('Gemini API error:', apiMessage || error.message);
+
+    if (status === 429) {
+      return res.status(429).json({ error: 'The assistant is receiving too many requests. Please try again shortly.' });
+    }
+
+    if (status && status >= 400 && status < 500) {
+      return res.status(status).json({ error: apiMessage || 'Unable to process your request. Please adjust your question and try again.' });
+    }
+
+    res.status(500).json({ error: 'Something went wrong while contacting the assistant. Please try again later.' });
+  }
+});
+
 // Serve static files from the frontend directory
 const frontendSrcDir = path.join(__dirname, '../frontend/src');
 const frontendPagesDir = path.join(frontendSrcDir, 'pages');
 const frontendStyleDir = path.join(frontendSrcDir, 'style');
+const frontendScriptsDir = path.join(frontendSrcDir, 'scripts');
 
 app.use(express.static(frontendPagesDir));
 app.use('/style', express.static(frontendStyleDir));
+app.use('/scripts', express.static(frontendScriptsDir));
 
 app.get('/', (req, res) => {
   res.sendFile(path.join(frontendPagesDir, 'index.html'));
